@@ -572,6 +572,8 @@
 			reg = <0x01c0f000 0x1000>;
 			clocks = <&ahb_gates 8>, <&mmc0>;
 			interrupts = <0 32 1 >;
+			bus-width = <4>;
+			pinctrl-names = "default";
 			status = "disabled";
 		};
 

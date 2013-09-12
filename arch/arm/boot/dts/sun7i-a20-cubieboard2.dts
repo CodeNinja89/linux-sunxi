@@ -65,11 +65,12 @@
 			status = "okay";
 
 		sdc0: sdc@01C0f000 {
-				bus-width = <4>;
-				pinctrl-0 = <&sdc0_pins_a>;
-				cd-gpios = <&pio 7 1 0>; /* PH1 */
-				mmc-supply = <&vcc_3v3_reg>;
-				status = "okay";
+			pinctrl-names = "default";
+			pinctrl-0 = <&sdc0_pins_a>;
+			cd-gpios = <&pio 7 1 0>; /* PH1 */
+			cd-mode = <1>;
+			vmmc-supply = <&vcc_3v3_reg>;
+			status = "okay";
 		};
 	};
 
