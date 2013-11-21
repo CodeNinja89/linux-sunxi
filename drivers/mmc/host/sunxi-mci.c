@@ -70,17 +70,20 @@ static s32 sunxi_mmc_init_host(struct mmc_host* mmc)
 	SMC_DBG(smc_host, "MMC Driver init host %d\n", smc_host->mmc->index);
 
 	/* reset controller */
-	rval = mci_readl(smc_host, REG_GCTRL) | SDXC_HWReset;
+	rval = mci_readl(smc_host, REG_GCTRL);
+	rval |= SDXC_HWReset;
 	mci_writel(smc_host, REG_GCTRL, rval);
-
 	mci_writel(smc_host, REG_FTRGL, 0x70008);
 	mci_writel(smc_host, REG_TMOUT, 0xffffffff);
 	mci_writel(smc_host, REG_IMASK, 0);
 	mci_writel(smc_host, REG_RINTR, 0xffffffff);
 	mci_writel(smc_host, REG_DBGC, 0xdeb);
 	mci_writel(smc_host, REG_FUNS, 0xceaa0000);
-	rval = mci_readl(smc_host, REG_GCTRL)|SDXC_INTEnb;
-	rval &= ~SDXC_AccessDoneDirect;
+
+	/* Internal DMA needs to be enabled */
+	rval = mci_readl(smc_host, REG_GCTRL);
+	rval |= SDXC_INTEnb;
+	rval |= SDXC_DMAEnb;
 	mci_writel(smc_host, REG_GCTRL, rval);
 
 	smc_host->voltage = SDC_WOLTAGE_OFF;
@@ -229,9 +232,9 @@ static void sunxi_mmc_init_idma_des(struct sunxi_mmc_host* smc_host, struct mmc_
 			memset((void*)&pdes[des_idx], 0, sizeof(struct sunxi_mmc_idma_des));
 			config = SDXC_IDMAC_DES0_CH|SDXC_IDMAC_DES0_OWN|SDXC_IDMAC_DES0_DIC;
 
-		    	if (buff_frag_num > 1 && j != buff_frag_num-1)
+			if (buff_frag_num > 1 && j != buff_frag_num-1)
 				pdes[des_idx].data_buf1_sz = SDXC_DES_BUFFER_MAX_LEN;
-		    	else
+			else
 				pdes[des_idx].data_buf1_sz = remain;
 
 			pdes[des_idx].buf_addr_ptr1 = sg_dma_address(&data->sg[i])
@@ -287,23 +290,33 @@ static int sunxi_mmc_prepare_dma(struct sunxi_mmc_host* smc_host, struct mmc_dat
 
 	sunxi_mmc_init_idma_des(smc_host, data);
 
+	//Setting general control register:
 	temp = mci_readl(smc_host, REG_GCTRL);
-	temp |= SDXC_DMAEnb;
-	mci_writel(smc_host, REG_GCTRL, temp);
 	temp |= SDXC_DMAReset;
 	mci_writel(smc_host, REG_GCTRL, temp);
+	mdelay(1);
+	temp |= SDXC_DMAEnb;
+	temp |= SDXC_ACCESS_BY_DMA;
+	mci_writel(smc_host, REG_GCTRL, temp);
+
+	//Configuring internal DMA controler:
 	mci_writel(smc_host, REG_DMAC, SDXC_IDMACSoftRST);
 	temp = SDXC_IDMACFixBurst|SDXC_IDMACIDMAOn;
 	mci_writel(smc_host, REG_DMAC, temp);
+
 	temp = mci_readl(smc_host, REG_IDIE);
-	temp &= ~(SDXC_IDMACReceiveInt|SDXC_IDMACTransmitInt);
+	temp &= ~SDXC_IDMACTransmitInt;
+	temp &= ~SDXC_IDMACReceiveInt;
+
 	if (data->flags & MMC_DATA_WRITE)
 		temp |= SDXC_IDMACTransmitInt;
 	else
 		temp |= SDXC_IDMACReceiveInt;
+
 	mci_writel(smc_host, REG_IDIE, temp);
 
 	//write descriptor address to register
+	SMC_DBG(smc_host,"scatterlist address: %x\n",smc_host->sg_dma);
 	mci_writel(smc_host, REG_DLBA, smc_host->sg_dma);
 
 	return 0;
@@ -369,11 +382,12 @@ void sunxi_mmc_dump_errinfo(struct sunxi_mmc_host* smc_host)
 s32 sunxi_mmc_wait_access_done(struct sunxi_mmc_host* smc_host)
 {
 	s32 own_set = 0;
-	unsigned long expire = jiffies + msecs_to_jiffies(5);
-	while (!(mci_readl(smc_host, REG_GCTRL) & SDXC_MemAccessDone) && jiffies < expire);
-	if (!(mci_readl(smc_host, REG_GCTRL) & SDXC_MemAccessDone)) {
+	unsigned long expire = jiffies + msecs_to_jiffies(1000);
+	while (!(mci_readl(smc_host, REG_GCTRL) & SDXC_AccessDoneDirect) && (jiffies < expire));
+	if (!(mci_readl(smc_host, REG_GCTRL) & SDXC_AccessDoneDirect)) {
 		SMC_MSG(smc_host, "wait memory access done timeout !!\n");
 	}
+	SMC_MSG(smc_host, "REG_GCTRL contains: %i\n", mci_readl(smc_host, REG_GCTRL));
 	return own_set;
 }
 
@@ -777,7 +791,7 @@ static void sunxi_mmc_clk_set_rate(struct sunxi_mmc_host *smc_host, unsigned int
 	u32 src_clk;
 	u32 oclk_dly = 2;
 	u32 sclk_dly = 2;
-	u32 temp;
+// 	u32 temp;
 	struct sunxi_mmc_clk_dly* dly = NULL;
 
 	SMC_DBG(smc_host,"%s: requested rate %i\n", __FUNCTION__, rate);
@@ -834,12 +848,6 @@ static void sunxi_mmc_clk_set_rate(struct sunxi_mmc_host *smc_host, unsigned int
 
 	sunxi_mmc_set_clk_dly(smc_host, oclk_dly, sclk_dly);
 	sunxi_mmc_oclk_onoff(smc_host, 1, 0);
-}
-
-static int sunxi_mmc_execute_tuning(struct mmc_host *mmc, u32 opcode)
-{
-	printk("%s: opcode = %i\n",__FUNCTION__,opcode);
-	return 0;
 }
 
 static void sunxi_mmc_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
@@ -1040,7 +1048,6 @@ static struct mmc_host_ops sunxi_mmc_ops = {
 	.get_cd		= sunxi_mmc_card_present,
 // 	.enable_sdio_irq= sunxi_mmc_enable_sdio_irq,
 	.hw_reset	= sunxi_mmc_hw_reset,
-	.execute_tuning = sunxi_mmc_execute_tuning,
 };
 
 static int __init sunxi_mmc_probe(struct platform_device *pdev)
@@ -1048,6 +1055,16 @@ static int __init sunxi_mmc_probe(struct platform_device *pdev)
 	struct sunxi_mmc_host *smc_host = NULL;
 	struct mmc_host *mmc = NULL;
 	int ret = 0;
+
+	/*
+	 * Right now device-tree probed devices don't get dma_mask
+	 * set. Since shared usb code relies on it, set it here for
+	 * now. Once we have dma capability bindings this can go away.
+	 */
+	if (!pdev->dev.dma_mask)
+		pdev->dev.dma_mask = &pdev->dev.coherent_dma_mask;
+	if (!pdev->dev.coherent_dma_mask)
+		pdev->dev.coherent_dma_mask = DMA_BIT_MASK(32);
 
 	mmc = mmc_alloc_host(sizeof(struct sunxi_mmc_host), &pdev->dev);
 	if (!mmc) {
@@ -1106,6 +1123,9 @@ static int __init sunxi_mmc_probe(struct platform_device *pdev)
 	//400kHz ~ 52MHz
 	mmc->f_min			=   400000;
 	mmc->f_max			= 52000000;
+	//available voltages
+	mmc->ocr_avail		= mmc_regulator_get_ocrmask(smc_host->regulator);
+	mmc->caps			= MMC_CAP_4_BIT_DATA|MMC_CAP_NEEDS_POLL;
 
 	ret = mmc_add_host(mmc);
 	if (ret) {
