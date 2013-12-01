@@ -63,6 +63,7 @@
 			snps,phy-addr = <1>;
 			phy-mode = "mii";
 			status = "okay";
+		};
 
 		sdc0: sdc@01C0f000 {
 			pinctrl-names = "default";
@@ -102,10 +103,10 @@
 			pinctrl-0 = <&ahci_pwr_pin>;
 			gpio = <&pio 1 8 0>;
 			enable-active-high;
+		};
 
 		vcc_3v3_reg: regulator@0 {
 			compatible = "regulator-fixed";
-			reg = <0>;
 			regulator-name = "vcc_3v3";
 			regulator-min-microvolt = <3300000>;
 			regulator-max-microvolt = <3300000>;
