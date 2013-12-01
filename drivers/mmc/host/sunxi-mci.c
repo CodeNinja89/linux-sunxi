@@ -84,7 +84,7 @@ static s32 sunxi_mmc_init_host(struct mmc_host* mmc)
 	/* Internal DMA needs to be enabled */
 	rval = mci_readl(smc_host, REG_GCTRL);
 	rval |= SDXC_INTEnb;
-	rval |= SDXC_DMAEnb;
+//	rval |= SDXC_DMAEnb;
 	mci_writel(smc_host, REG_GCTRL, rval);
 
 	smc_host->voltage = SDC_WOLTAGE_OFF;
@@ -293,12 +293,15 @@ static int sunxi_mmc_prepare_dma(struct sunxi_mmc_host* smc_host, struct mmc_dat
 
 	//Setting general control register:
 	temp = mci_readl(smc_host, REG_GCTRL);
-	temp |= SDXC_DMAReset;
+//	temp |= SDXC_DMAReset;
+	temp |= SDXC_DMAEnb;
 	mci_writel(smc_host, REG_GCTRL, temp);
+#if 0
 	mdelay(1);
 	temp |= SDXC_DMAEnb;
 	temp |= SDXC_ACCESS_BY_DMA;
 	mci_writel(smc_host, REG_GCTRL, temp);
+#endif
 
 	//Configuring internal DMA controler:
 	mci_writel(smc_host, REG_DMAC, SDXC_IDMACSoftRST);
@@ -319,6 +322,7 @@ static int sunxi_mmc_prepare_dma(struct sunxi_mmc_host* smc_host, struct mmc_dat
 	//write descriptor address to register
 	SMC_DBG(smc_host,"scatterlist address: %x\n",smc_host->sg_dma);
 	mci_writel(smc_host, REG_DLBA, smc_host->sg_dma);
+	mci_writel(smc_host, REG_FTRGL, 0x20070008);
 
 	return 0;
 }
@@ -474,6 +478,16 @@ static int sunxi_mmc_resource_request(struct sunxi_mmc_host *host)
 	struct resource *regs;
 	int ret = 0;
 
+	host->regulator = devm_regulator_get(&pdev->dev, "vmmc");
+	if (IS_ERR(host->regulator)) {
+			if (PTR_ERR(host->regulator) == -EPROBE_DEFER)
+				return -EPROBE_DEFER;
+			else
+				dev_info(&pdev->dev, "no regulator found\n");
+	}
+	host->mmc->supply.vmmc = host->regulator;
+	host->mmc->supply.vqmmc = NULL;
+
 	regs = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (!regs)
 		return -ENXIO;
@@ -502,16 +516,6 @@ static int sunxi_mmc_resource_request(struct sunxi_mmc_host *host)
 		dev_err(&pdev->dev, "Failed to allocate DMA descriptor\n");
 		goto free_mod_clk;
 	}
-
-	host->regulator = devm_regulator_get(&pdev->dev, "vmmc");
-	if (IS_ERR(host->regulator)) {
-			if (PTR_ERR(host->regulator) == -EPROBE_DEFER)
-				return -EPROBE_DEFER;
-			else
-				dev_info(&pdev->dev, "no regulator found\n");
-	}
-	supply.vmmc = host->regulator;
-	host->mmc->supply = supply;
 
 	host->wp_pin=of_get_named_gpio(np, "wp-gpios", 0);
 	if (gpio_is_valid(host->wp_pin)) {
@@ -1089,7 +1093,8 @@ static int __init sunxi_mmc_probe(struct platform_device *pdev)
 	mmc->f_min			=   400000;
 	mmc->f_max			= 52000000;
 	//available voltages
-	mmc->ocr_avail		= mmc_regulator_get_ocrmask(smc_host->regulator);
+	mmc->ocr_avail		= MMC_VDD_32_33 | MMC_VDD_33_34;
+	mmc_regulator_get_ocrmask(smc_host->regulator);
 	mmc->caps			= MMC_CAP_4_BIT_DATA|MMC_CAP_NEEDS_POLL;
 
 	ret = mmc_add_host(mmc);
