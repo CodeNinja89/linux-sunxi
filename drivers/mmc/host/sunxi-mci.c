@@ -530,6 +530,11 @@ static void sunxi_mmc_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 		break;
 
 	case MMC_POWER_UP:
+		if (!IS_ERR(host->vmmc)) {
+			mmc_regulator_set_ocr(host->mmc, host->vmmc, ios->vdd);
+			udelay(200);
+		}
+
 		err =  clk_prepare_enable(host->clk_ahb);
 		if (err) {
 			dev_err(mmc_dev(host->mmc), "AHB clk err %d\n", err);
@@ -556,6 +561,8 @@ static void sunxi_mmc_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 		sunxi_mmc_exit_host(host);
 		clk_disable_unprepare(host->clk_ahb);
 		clk_disable_unprepare(host->clk_mod);
+		if (!IS_ERR(host->vmmc))
+			mmc_regulator_set_ocr(host->mmc, host->vmmc, 0);
 		host->ferror = 0;
 		break;
 	}
@@ -752,15 +759,11 @@ static int sunxi_mmc_resource_request(struct sunxi_mmc_host *host,
 				      struct platform_device *pdev)
 {
 	struct device_node *np = pdev->dev.of_node;
-	struct regulator *regulator;
 	int ret;
 
-	regulator = devm_regulator_get(&pdev->dev, "vmmc");
-	if (IS_ERR(regulator))
-			return PTR_ERR(regulator);
-
-	host->mmc->supply.vmmc = regulator;
-	host->mmc->supply.vqmmc = NULL;
+	host->vmmc = devm_regulator_get_optional(&pdev->dev, "vmmc");
+	if (IS_ERR(host->vmmc) && PTR_ERR(host->vmmc) == -EPROBE_DEFER)
+		return -EPROBE_DEFER;
 
 	host->reg_base = devm_ioremap_resource(&pdev->dev,
 			      platform_get_resource(pdev, IORESOURCE_MEM, 0));
@@ -874,7 +877,11 @@ static int sunxi_mmc_probe(struct platform_device *pdev)
 	mmc->f_min		=   400000;
 	mmc->f_max		= 50000000;
 	/* available voltages */
-	mmc->ocr_avail = mmc_regulator_get_ocrmask(host->mmc->supply.vmmc);
+	if (!IS_ERR(host->vmmc))
+		mmc->ocr_avail = mmc_regulator_get_ocrmask(host->vmmc);
+	else
+		mmc->ocr_avail = MMC_VDD_32_33 | MMC_VDD_33_34;
+
 	mmc->caps = MMC_CAP_MMC_HIGHSPEED | MMC_CAP_SD_HIGHSPEED |
 		MMC_CAP_UHS_SDR12 | MMC_CAP_UHS_SDR25 | MMC_CAP_UHS_SDR50 |
 		MMC_CAP_UHS_DDR50 | MMC_CAP_SDIO_IRQ | MMC_CAP_NEEDS_POLL |

@@ -195,6 +195,7 @@ struct sunxi_idma_des {
 
 struct sunxi_mmc_host {
 	struct mmc_host *mmc;
+	struct regulator *vmmc;
 
 	/* IO mapping base */
 	void __iomem *reg_base;
