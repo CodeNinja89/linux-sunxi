@@ -18,7 +18,6 @@
 
 #include <linux/kernel.h>
 #include <linux/module.h>
-#include <linux/init.h>
 #include <linux/io.h>
 #include <linux/device.h>
 #include <linux/interrupt.h>
@@ -26,7 +25,6 @@
 #include <linux/err.h>
 
 #include <linux/clk.h>
-#include <linux/clk-provider.h>
 #include <linux/clk-private.h>
 #include <linux/clk/sunxi.h>
 
@@ -47,9 +45,6 @@
 #include <linux/mmc/mmc.h>
 #include <linux/mmc/core.h>
 #include <linux/mmc/card.h>
-
-#include <asm/cacheflush.h>
-#include <asm/uaccess.h>
 
 #include "sunxi-mci.h"
 
