@@ -875,10 +875,12 @@ static int sunxi_mmc_probe(struct platform_device *pdev)
 	mmc->f_max		= 50000000;
 	/* available voltages */
 	mmc->ocr_avail = mmc_regulator_get_ocrmask(host->mmc->supply.vmmc);
-	mmc->caps = MMC_CAP_4_BIT_DATA | MMC_CAP_MMC_HIGHSPEED |
-		MMC_CAP_SD_HIGHSPEED | MMC_CAP_UHS_SDR12 | MMC_CAP_UHS_SDR25 |
-		MMC_CAP_UHS_SDR50 | MMC_CAP_UHS_DDR50 | MMC_CAP_SDIO_IRQ |
-		MMC_CAP_NEEDS_POLL | MMC_CAP_DRIVER_TYPE_A;
+	mmc->caps = MMC_CAP_MMC_HIGHSPEED | MMC_CAP_SD_HIGHSPEED |
+		MMC_CAP_UHS_SDR12 | MMC_CAP_UHS_SDR25 | MMC_CAP_UHS_SDR50 |
+		MMC_CAP_UHS_DDR50 | MMC_CAP_SDIO_IRQ | MMC_CAP_NEEDS_POLL |
+		MMC_CAP_DRIVER_TYPE_A;
+	if (host->bus_width == 4)
+		mmc->caps |= MMC_CAP_4_BIT_DATA;
 	mmc->caps2 = MMC_CAP2_NO_PRESCAN_POWERUP;
 
 	ret = mmc_add_host(mmc);
