@@ -1,19 +1,15 @@
 /*
- * drivers/mmc/host/sunxi-mci.c
- * (C) Copyright 2007-2011
- * Reuuimlla Technology Co., Ltd. <www.reuuimllatech.com>
- * Aaron Maoye <leafy.myeh@reuuimllatech.com>
- * (C) Copyright 20013-2017
- * O2S GmbH <www.o2s.ch>
- * David Lanzendörfer <david.lanzendoerfer@o2s.ch>
- *
- * This is the driver for the SD/MMC host controller within the AllWinner A1X SoCs
+ * Driver for sunxi SD/MMC host controllers
+ * (C) Copyright 2007-2011 Reuuimlla Technology Co., Ltd.
+ * (C) Copyright 2007-2011 Aaron Maoye <leafy.myeh@reuuimllatech.com>
+ * (C) Copyright 2013-2013 O2S GmbH <www.o2s.ch>
+ * (C) Copyright 2013-2013 David Lanzendörfer <david.lanzendoerfer@o2s.ch>
+ * (C) Copyright 2013-2013 Hans de Goede <hdegoede@redhat.com>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as
  * published by the Free Software Foundation; either version 2 of
  * the License, or (at your option) any later version.
- *
  */
 
 #include <linux/kernel.h>
@@ -48,11 +44,7 @@
 
 #include "sunxi-mci.h"
 
-// Where to find what in the device tree
-#define OF_AHB_CLK_POSITION 0
-#define OF_MOD_CLK_POSITION 1
-
-static void sunxi_mmc_init_host(struct mmc_host* mmc)
+static void sunxi_mmc_init_host(struct mmc_host *mmc)
 {
 	u32 rval;
 	struct sunxi_mmc_host *smc_host = mmc_priv(mmc);
@@ -73,7 +65,7 @@ static void sunxi_mmc_init_host(struct mmc_host* mmc)
 	mci_writel(smc_host, REG_GCTRL, rval);
 }
 
-static void sunxi_mmc_exit_host(struct sunxi_mmc_host* smc_host)
+static void sunxi_mmc_exit_host(struct sunxi_mmc_host *smc_host)
 {
 	mci_writel(smc_host, REG_GCTRL, SDXC_HWReset);
 }
@@ -116,7 +108,8 @@ static void sunxi_mmc_exit_host(struct sunxi_mmc_host* smc_host)
 /*  * 200M     5ns     600M    1.67ns  1.4ns   0.8ns   1     3.33ns    1.67ns */
 /*  *\/ */
 
-static void sunxi_mmc_init_idma_des(struct sunxi_mmc_host* host, struct mmc_data* data)
+static void sunxi_mmc_init_idma_des(struct sunxi_mmc_host *host,
+				    struct mmc_data *data)
 {
 	struct sunxi_idma_des *pdes = (struct sunxi_idma_des *)host->sg_cpu;
 	struct sunxi_idma_des *pdes_pa = (struct sunxi_idma_des *)host->sg_dma;
@@ -148,7 +141,8 @@ static enum dma_data_direction sunxi_mmc_get_dma_dir(struct mmc_data *data)
 		return DMA_FROM_DEVICE;
 }
 
-static int sunxi_mmc_prepare_dma(struct sunxi_mmc_host* smc_host, struct mmc_data* data)
+static int sunxi_mmc_prepare_dma(struct sunxi_mmc_host *smc_host,
+				 struct mmc_data *data)
 {
 	u32 dma_len;
 	u32 i;
@@ -194,8 +188,8 @@ static int sunxi_mmc_prepare_dma(struct sunxi_mmc_host* smc_host, struct mmc_dat
 	return 0;
 }
 
-static void sunxi_mmc_send_manual_stop(struct sunxi_mmc_host* host,
-				       struct mmc_request* req)
+static void sunxi_mmc_send_manual_stop(struct sunxi_mmc_host *host,
+				       struct mmc_request *req)
 {
 	u32 cmd_val = SDXC_Start | SDXC_RspExp | SDXC_StopAbortCMD
 			| SDXC_CheckRspCRC | MMC_STOP_TRANSMISSION;
@@ -206,7 +200,8 @@ static void sunxi_mmc_send_manual_stop(struct sunxi_mmc_host* host,
 	mci_writel(host, REG_CMDR, cmd_val);
 	do {
 		ri = mci_readl(host, REG_RINTR);
-	} while (!(ri & (SDXC_CmdDone | SDXC_IntErrBit)) && jiffies < expire);
+	} while (!(ri & (SDXC_CmdDone | SDXC_IntErrBit)) &&
+		 time_before(jiffies, expire));
 
 	if (ri & SDXC_IntErrBit) {
 		dev_err(mmc_dev(host->mmc), "send stop command failed\n");
@@ -220,10 +215,10 @@ static void sunxi_mmc_send_manual_stop(struct sunxi_mmc_host* host,
 	mci_writel(host, REG_RINTR, ri);
 }
 
-static void sunxi_mmc_dump_errinfo(struct sunxi_mmc_host* smc_host)
+static void sunxi_mmc_dump_errinfo(struct sunxi_mmc_host *smc_host)
 {
 	struct mmc_command *cmd = smc_host->mrq->cmd;
-	struct mmc_data* data = smc_host->mrq->data;
+	struct mmc_data *data = smc_host->mrq->data;
 
 	/* For some cmds timeout is normal with sd/mmc cards */
 	if ((smc_host->int_sum & SDXC_IntErrBit) == SDXC_RespTimeout &&
@@ -231,7 +226,7 @@ static void sunxi_mmc_dump_errinfo(struct sunxi_mmc_host* smc_host)
 		return;
 
 	dev_err(mmc_dev(smc_host->mmc),
-		"smc %d err, cmd %d,%s%s%s%s%s%s%s%s%s%s%s !!\n",
+		"smc %d err, cmd %d,%s%s%s%s%s%s%s%s%s%s !!\n",
 		smc_host->mmc->index, cmd->opcode,
 		data ? (data->flags & MMC_DATA_WRITE ? " WR" : " RD") : "",
 		smc_host->int_sum & SDXC_RespErr     ? " RE"     : "",
@@ -239,7 +234,6 @@ static void sunxi_mmc_dump_errinfo(struct sunxi_mmc_host* smc_host)
 		smc_host->int_sum & SDXC_DataCRCErr  ? " DCE"    : "",
 		smc_host->int_sum & SDXC_RespTimeout ? " RTO"    : "",
 		smc_host->int_sum & SDXC_DataTimeout ? " DTO"    : "",
-		smc_host->int_sum & SDXC_DataStarve  ? " DS"     : "",
 		smc_host->int_sum & SDXC_FIFORunErr  ? " FE"     : "",
 		smc_host->int_sum & SDXC_HardWLocked ? " HL"     : "",
 		smc_host->int_sum & SDXC_StartBitErr ? " SBE"    : "",
@@ -278,7 +272,8 @@ static void sunxi_mmc_finalize_request(struct sunxi_mmc_host *host)
 			mrq->cmd->resp[0] = mci_readl(host, REG_RESP0);
 		}
 		if (mrq->data)
-			mrq->data->bytes_xfered = (mrq->data->blocks * mrq->data->blksz);
+			mrq->data->bytes_xfered =
+				mrq->data->blocks * mrq->data->blksz;
 	}
 
 	if (mrq->data) {
@@ -321,7 +316,7 @@ static void sunxi_mmc_finalize_request(struct sunxi_mmc_host *host)
 static s32 sunxi_mmc_get_ro(struct mmc_host *mmc)
 {
 	struct sunxi_mmc_host *host = mmc_priv(mmc);
-	
+
 	int read_only = 0;
 
 	if (gpio_is_valid(host->wp_pin)) {
@@ -412,7 +407,7 @@ static void sunxi_mmc_oclk_onoff(struct sunxi_mmc_host *host, u32 oclk_en)
 	mci_writel(host, REG_CMDR, rval);
 	do {
 		rval = mci_readl(host, REG_CMDR);
-	} while (jiffies < expire && (rval & SDXC_Start));
+	} while (time_before(jiffies, expire) && (rval & SDXC_Start));
 
 	if (rval & SDXC_Start) {
 		dev_err(mmc_dev(host->mmc), "fatal err update clk timeout\n");
@@ -420,7 +415,7 @@ static void sunxi_mmc_oclk_onoff(struct sunxi_mmc_host *host, u32 oclk_en)
 	}
 }
 
-static void sunxi_mmc_set_clk_dly(struct sunxi_mmc_host* smc_host,
+static void sunxi_mmc_set_clk_dly(struct sunxi_mmc_host *smc_host,
 				  u32 oclk_dly, u32 sclk_dly)
 {
 	unsigned long iflags;
@@ -431,24 +426,25 @@ static void sunxi_mmc_set_clk_dly(struct sunxi_mmc_host* smc_host,
 	spin_unlock_irqrestore(&smc_host->lock, iflags);
 }
 
-struct sunxi_mmc_clk_dly mmc_clk_dly [MMC_CLK_MOD_NUM] = {
-	{MMC_CLK_400K, 0, 7},
-	{MMC_CLK_25M, 0, 5},
-	{MMC_CLK_50M, 3, 5},
-	{MMC_CLK_50MDDR, 2, 4},
-	{MMC_CLK_50MDDR_8BIT, 2, 4},
-	{MMC_CLK_100M, 1, 4},
-	{MMC_CLK_200M, 1, 4},
+struct sunxi_mmc_clk_dly mmc_clk_dly[MMC_CLK_MOD_NUM] = {
+	{ MMC_CLK_400K, 0, 7 },
+	{ MMC_CLK_25M, 0, 5 },
+	{ MMC_CLK_50M, 3, 5 },
+	{ MMC_CLK_50MDDR, 2, 4 },
+	{ MMC_CLK_50MDDR_8BIT, 2, 4 },
+	{ MMC_CLK_100M, 1, 4 },
+	{ MMC_CLK_200M, 1, 4 },
 };
 
-static void sunxi_mmc_clk_set_rate(struct sunxi_mmc_host *smc_host, unsigned int rate)
+static void sunxi_mmc_clk_set_rate(struct sunxi_mmc_host *smc_host,
+				   unsigned int rate)
 {
 	u32 newrate;
 	u32 src_clk;
 	u32 oclk_dly;
 	u32 sclk_dly;
 	u32 temp;
-	struct sunxi_mmc_clk_dly* dly = NULL;
+	struct sunxi_mmc_clk_dly *dly = NULL;
 
 	newrate = clk_round_rate(smc_host->clk_mod, rate);
 	if (smc_host->clk_mod_rate == newrate) {
@@ -641,8 +637,8 @@ static int sunxi_mmc_card_present(struct mmc_host *mmc)
 static void sunxi_mmc_request(struct mmc_host *mmc, struct mmc_request *mrq)
 {
 	struct sunxi_mmc_host *host = mmc_priv(mmc);
-	struct mmc_command* cmd = mrq->cmd;
-	struct mmc_data* data = mrq->data;
+	struct mmc_command *cmd = mrq->cmd;
+	struct mmc_data *data = mrq->data;
 	unsigned long iflags;
 	u32 imask = SDXC_IntErrBit;
 	u32 cmd_val = SDXC_Start | (cmd->opcode & 0x3f);
