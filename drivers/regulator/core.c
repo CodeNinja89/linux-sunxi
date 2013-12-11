@@ -1346,7 +1346,7 @@ static struct regulator *_regulator_get(struct device *dev, const char *id,
 
 		rdev = dummy_regulator_rdev;
 		goto found;
-	} else {
+	} else if (allow_dummy || exclusive) {
 		dev_err(dev, "dummy supplies not allowed\n");
 	}
 
