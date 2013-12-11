@@ -212,7 +212,7 @@ static void sunxi_mmc_send_manual_stop(struct sunxi_mmc_host *host,
 			req->stop->resp[0] = mci_readl(host, REG_RESP0);
 	}
 
-	mci_writel(host, REG_RINTR, ri);
+	mci_writel(host, REG_RINTR, 0xffff);
 }
 
 static void sunxi_mmc_dump_errinfo(struct sunxi_mmc_host *smc_host)
