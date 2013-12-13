@@ -175,13 +175,8 @@ static int sunxi_mmc_prepare_dma(struct sunxi_mmc_host *smc_host,
 
 	mci_writel(smc_host, REG_DMAC, SDXC_IDMACSoftRST);
 
-	temp = mci_readl(smc_host, REG_IDIE);
-	temp &= ~(SDXC_IDMACReceiveInt|SDXC_IDMACTransmitInt);
-	if (data->flags & MMC_DATA_WRITE)
-		temp |= SDXC_IDMACTransmitInt;
-	else
-		temp |= SDXC_IDMACReceiveInt;
-	mci_writel(smc_host, REG_IDIE, temp);
+	if (!(data->flags & MMC_DATA_WRITE))
+		mci_writel(smc_host, REG_IDIE, SDXC_IDMACReceiveInt);
 
 	mci_writel(smc_host, REG_DMAC, SDXC_IDMACFixBurst | SDXC_IDMACIDMAOn);
 
@@ -344,7 +339,7 @@ static irqreturn_t sunxi_mmc_irq(int irq, void *dev_id)
 		host->mrq, msk_int, idma_int);
 
 	if (host->mrq) {
-		if (idma_int & (SDXC_IDMACTransmitInt|SDXC_IDMACReceiveInt))
+		if (idma_int & SDXC_IDMACReceiveInt)
 			host->wait_dma = 0;
 
 		host->int_sum |= msk_int;
