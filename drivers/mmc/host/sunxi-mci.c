@@ -714,20 +714,9 @@ static void sunxi_mmc_request(struct mmc_host *mmc, struct mmc_request *mrq)
 	mci_writel(host, REG_CMDR, cmd_val);
 }
 
-static const struct platform_device_id sunxi_mmc_devtype[] = {
-	{
-		.name = "sunxi-mci",
-		.driver_data = 0,
-	},
-	{ /* sentinel */ }
-};
-MODULE_DEVICE_TABLE(platform, sunxi_mmc_devtype);
-
 static const struct of_device_id sunxi_mmc_of_match[] = {
-	{
-		.compatible = "allwinner,sunxi-mmc",
-		.data = &sunxi_mmc_devtype[0],
-	},
+	{ .compatible = "allwinner,sun4i-mmc", },
+	{ .compatible = "allwinner,sun5i-mmc", },
 	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(of, sunxi_mmc_of_match);
@@ -746,6 +735,11 @@ static int sunxi_mmc_resource_request(struct sunxi_mmc_host *host,
 {
 	struct device_node *np = pdev->dev.of_node;
 	int ret;
+
+	if (of_device_is_compatible(np, "allwinner,sun4i-mmc"))
+		host->idma_des_size_bits = 13;
+	else
+		host->idma_des_size_bits = 16;
 
 	host->vmmc = devm_regulator_get_optional(&pdev->dev, "vmmc");
 	if (IS_ERR(host->vmmc) && PTR_ERR(host->vmmc) == -EPROBE_DEFER)
@@ -775,6 +769,12 @@ static int sunxi_mmc_resource_request(struct sunxi_mmc_host *host,
 		return PTR_ERR(host->clk_mod);
 	}
 
+	of_property_read_u32(np, "bus-width", &host->bus_width);
+	if (host->bus_width != 1 && host->bus_width != 4) {
+		dev_err(&pdev->dev, "Invalid bus-width %d\n", host->bus_width);
+		return -EINVAL;
+	}
+
 	of_property_read_u32(np, "cd-mode", &host->cd_mode);
 	switch (host->cd_mode) {
 	case CARD_DETECT_BY_GPIO_POLL:
@@ -794,20 +794,6 @@ static int sunxi_mmc_resource_request(struct sunxi_mmc_host *host,
 		break;
 	default:
 		dev_err(&pdev->dev, "Invalid cd-mode %d\n", host->cd_mode);
-		return -EINVAL;
-	}
-
-	of_property_read_u32(np, "bus-width", &host->bus_width);
-	if (host->bus_width != 1 && host->bus_width != 4) {
-		dev_err(&pdev->dev, "Invalid bus-width %d\n", host->bus_width);
-		return -EINVAL;
-	}
-
-	of_property_read_u32(np, "idma-des-size-bits",
-			     &host->idma_des_size_bits);
-	if (host->idma_des_size_bits != 13 && host->idma_des_size_bits != 16) {
-		dev_err(&pdev->dev, "Invalid idma-des-size-bits %d\n",
-			host->idma_des_size_bits);
 		return -EINVAL;
 	}
 
