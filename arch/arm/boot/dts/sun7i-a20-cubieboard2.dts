@@ -13,6 +13,7 @@
 
 /dts-v1/;
 /include/ "sun7i-a20.dtsi"
+/include/ "sunxi-ahci-reg.dtsi"
 
 / {
 	model = "Cubietech Cubieboard2";
@@ -32,6 +33,11 @@
 			phy1: ethernet-phy@1 {
 				reg = <1>;
 			};
+		};
+
+		ahci: sata@01c18000 {
+			target-supply = <&reg_ahci_5v>;
+			status = "okay";
 		};
 
 		pinctrl@01c20800 {
